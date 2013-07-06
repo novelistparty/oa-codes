@@ -1,0 +1,8 @@
+# File Stuff
+
+* lloyd-mirror.py and peRefModel.py are similar, keep both or merge.
+
+# Code Stuff
+
+* Find equation notes from project and compare to pematlab.m.
+* Check each .m file in MATLAB so that it runs and plots properly.
