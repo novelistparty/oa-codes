@@ -12,48 +12,62 @@ tic
     rho1 =  1000; % kg/m^3
     
 % The bottom has parameters:
-    c2 =    1800; % m/s
-    rho2 =  2000; % kg/m^3
-    alpha = 1;    % dB/wavelength
+    c2 =    1700; % m/s
+    rho2 =  1500; % kg/m^3
+    alpha = 0.5;    % dB/wavelength
     
 % Computational absorption layer:
     alphaAL = 0.01;
 
 % Source parameters
-    zs = 50;
-    f0 = 100; 
+    zs = 180;
+    f0 = 25; 
     k0 = 2 * pi * f0 / c1;
     k2 = 2 * pi * f0 / c2;
     lambda0 = c1 / f0; 
 
 % Define zmax of computational domain Eq. (6.214)
  % H is max. depth of physical domain on propg. path 
-    H = 2000; 
+    H = 600; 
     zmax = 4 * H / 3;
-    rmax = 10000;
+    rmax = 15000;
     
 % Grid Size (6.216) and (6.219)
-    dz = lambda0 / 4;
-    dr = 5 * dz;
+    dz = lambda0 / 5;
+    dr = 2 * dz;
     
 %% Density reduced Squared index of refraction. Eq. (6.152).
-r = 0: dr : rmax;
+r = 0.01: dr : rmax;
 z = 0: dz : zmax;
 
 [R, Z] = meshgrid(r,z);
 
-% D0 = 0 * R + 1500;
-D0 =  0.1763 * R + 100;  % Depth to interface.
-% D0 = - 0.1763 * R + 400;  % Depth to interface.
+%% Set depth of interface
+nr = length(r);
+d0 = 0 * r + 200;
+slope.start = round(nr/3);
+slope.end = round(nr*12.5/15);
+d0(slope.start:slope.end) = -.027 * r(slope.start:slope.end) + 335; % like front of COA
+d0(slope.end:end) = 0;
+figure; plot(r/1e3,d0)
+
+%% Grid it
+[D0, ~] = meshgrid(d0,z);
+
+% %D0 =  0.1763 * R + 100;  % Depth to interface.
+% %  D0 = - 0.1763 * R + 400;  % Depth to interface.
 D = (zmax - H) / 3;       % Thickness of absorption layer (for eq. 6.146)
 nsqr = ones(length(z),length(r));   % NOT density-reduced yet! (for eq. 6.158)
 
 %% Make nsqr. Third 'if' accounts for absorption layer below phys. domain
 for jj = 1:length(r)
     for ii = 1:length(z)
-        if z(ii) <= D0(1,jj)
+        if z(ii) <= d0(jj) % then we are in water
             nsqr(ii,jj) = 1;
-        elseif z(ii) > D0(1,jj) && z(ii) <= H
+            if z(ii) < 0.1 && d0(jj) < 0.1 % no more ocean
+                nsqr(ii,jj) = (c1/c2)^2 * (1 + 1j * alpha / 27.29);
+            end
+        elseif z(ii) > d0(jj) && z(ii) <= H
             nsqr(ii,jj) = (c1/c2)^2 * (1 + 1j * alpha / 27.29);
         elseif z(ii) > H
             nsqr(ii,jj) = (c1/c2)^2 + 1i * alphaAL * exp(-((z(ii) - zmax)/D)^2);
@@ -76,14 +90,14 @@ drho2 = (-1/(L^2)) * (rho2 - rho1) .* tanh((Z - D0)/L) .* sech((Z - D0)/L).^2;
 % Compute density-reduced squared index of refraction
 dr_nsqr = nsqr + (1 / (2*k0^2)) * ((drho2./rho) - 3 * drho1.^2 ./ (2*rho.^2));
 
-% % Plot of Density of field
-% figure; pcolor(r,z,rho)
-% shading interp
-% grid off
-% colorbar
-% set(gca,'Ydir','reverse')
-% % axis equal
-% axis tight
+% Plot of Density of field
+figure; pcolor(r,z,rho)
+shading interp
+grid off
+colorbar
+set(gca,'Ydir','reverse')
+% axis equal
+axis tight
 
 %% Plot of Density Reduced n^2 
 % figure; 
@@ -95,10 +109,10 @@ dr_nsqr = nsqr + (1 / (2*k0^2)) * ((drho2./rho) - 3 * drho1.^2 ./ (2*rho.^2));
 %% Starting fields - psi(r,z)
 psi = ones(length(z), length(r));
 
-%  % Greene's Source - eq. (6.102)
-% psi = zeros(length(z), length(r));
-% psi(:,1) = sqrt(k0) * (1.4467 - 0.4201 .* k0^2 .* (Z(:,1) - zs).^2)...
-%         .* exp(-((k0^2 * (Z(:,1) - zs).^2) / 3.0512));
+ % Greene's Source - eq. (6.102)
+psi = zeros(length(z), length(r));
+psi(:,1) = sqrt(k0) * (1.4467 - 0.4201 .* k0^2 .* (z - zs).^2)...
+        .* exp(-((k0^2 * (z - zs).^2) / 3.0512));
 
 % Standard Gaussian Source
 % psi(:,1) = sqrt(k0) * exp(-0.5 * k0^2 * (Z(:,1) - zs).^2) ... 
@@ -114,11 +128,11 @@ psi = ones(length(z), length(r));
 %     - sqrt(k0) * tan(tht1) * exp(-0.5*k0^2*(Z(:,1) + zs).^2*tan(tht1)^2) ...
 %     .* exp(1i*k0*(Z(:,1)+zs)*sin(tht2));
 
- % Line Source apprx. with depth dep. of mode 3
-ind = find(z>100);
-psi(:,1) = sin(3* pi/100 * z);
-psi(:,1) = abs(psi(:,1)) + 1i * sign(psi(:,1));
-psi(ind:end,1) = 0;
+% %  Line Source apprx. with depth dep. of mode 3
+% % ind = find(z>100);
+% % psi(:,1) = sin(3* pi/100 * z);
+% % psi(:,1) = abs(psi(:,1)) + 1i * sign(psi(:,1));
+% % psi(ind:end,1) = 0;
 
 % % Line Source apprx. with depth dep. of mode 2
 % H0 = 410;
@@ -132,13 +146,13 @@ dr_psi = psi;
 dr_psi = dr_psi ./ sqrt(rho);       
 dr_psi(1,:) = 0;
 
-% Plot source initial field
-figure;
-subplot(2,1,1); plot(z, real(psi(:,1)));
-subplot(2,1,2); plot(z, imag(psi(:,1)));
-% xlim([0, 150]); 
-title('Source field')
-legend('dr_\psi', 'rho')
+% % Plot source initial field
+% figure;
+% subplot(2,1,1); plot(z, real(psi(:,1)));
+% subplot(2,1,2); plot(z, imag(psi(:,1)));
+% % xlim([0, 150]); 
+% title('Source field')
+% legend('dr_\psi', 'rho')
 
 %% Split-step Algorithm
 
@@ -153,9 +167,9 @@ step = 0 * dr_psi(:,1);
 stepi = step;   % To be used for real part 
 stepr = stepi;  % To be used for imag part
 
-dr = 10 * dr;
+nR = length(r) - 1;
 for jj = 1 : (length(r) - 1)
-    step = exp(0.25 * 1i * k0 .* (dr_nsqr(:,jj) - 1) * dr) .* dr_psi(:,jj);
+    step = exp(0.5 * 1i * k0 .* (dr_nsqr(:,jj) - 1) * dr) .* dr_psi(:,jj);
     
     stepr = dst(real(step));
     stepi = dst(imag(step));
@@ -165,9 +179,9 @@ for jj = 1 : (length(r) - 1)
     stepr = idst(real(step));
     stepi = idst(imag(step));
     
-    dr_psi(:,jj+1) =  exp(0.25 * 1i * k0 .* (dr_nsqr(:,jj) - 1) * dr) .* (stepr + 1i * stepi);
+    dr_psi(:,jj+1) =  exp(0.5 * 1i * k0 .* (dr_nsqr(:,jj) - 1) * dr) .* (stepr + 1i * stepi);
 
-    jj
+    nR - jj
 end
 
 % Convert density-reduced pressure to pressure 
@@ -179,41 +193,42 @@ psi = psi(1:ind, :);
 R = R(1:ind, :);
 Z = Z(1:ind, :);
 
-%% Save Data to txt Files for Plotting in PyLab
-psiSave = -20 * log10( abs(psi) ./ sqrt(R));
-
-save('upslope\p.txt', 'psiSave', '-ascii', '-double')
-save('upslope\R.txt', 'R', '-ascii', '-double')
-save('upslope\Z.txt', 'Z', '-ascii', '-double')
-
-cd 'upslope'
-system('python U:\classes\ECE576_compmethods\pe_model\upslope\contour_plotting.py')
-cd ..
-
-
-% %% Plot TL
-% figure; pcolor(R, Z, -10 * log10( abs(psi) ./ sqrt(R) ))
-% shading interp
-% grid off
-% colorbar
-% % axis equal
-% % axis tight
-% % xlim([0 500])
-% % ylim([0 500])
-% set(gca,'Ydir','reverse')
+% %% Save Data to txt Files for Plotting in PyLab
+% psiSave = -20 * log10( abs(psi) ./ sqrt(R));
 % 
-% %% Plot TL Contours
-% % v = [15, 29, 35, 41, 46, 52, 57, 63, 105];
-% figure; 
-% contourf(R, Z, -10 * log10( abs(psi) ./ sqrt(R) ))
-% colorbar
-% % axis equal
-% % axis tight
-% caxis([50,80])
-% % xlim([0 500])
-% % ylim([0 500])
-% colormap 'cool'
-% set(gca,'Ydir','reverse')
+% save('upslope\p.txt', 'psiSave', '-ascii', '-double')
+% save('upslope\R.txt', 'R', '-ascii', '-double')
+% save('upslope\Z.txt', 'Z', '-ascii', '-double')
+% 
+% cd 'upslope'
+% system('python U:\classes\ECE576_compmethods\pe_model\upslope\contour_plotting.py')
+% cd ..
+
+
+%% Plot TL
+figure; pcolor(R/1e3, Z, -10 * log10( abs(psi) ./ sqrt(R) ))
+shading interp
+grid off
+colorbar
+% axis equal
+% axis tight
+% xlim([0 500])
+ylim([0 600])
+set(gca,'Ydir','reverse')
+caxis([-100 0])
+
+
+%% Plot TL Contours
+ v = [18 22 26 30 34 38 42 46];
+figure; 
+contourf(R/1e3, Z, -10 * log10( abs(psi) ./ sqrt(R) ),v,'CDataMapping','direct')
+colorbar
+% axis equal
+% axis tight
+% xlim([0 500])
+ ylim([0 600])
+colormap('spring')
+set(gca,'Ydir','reverse')
 
 %%
 toc
