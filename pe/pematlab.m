@@ -215,7 +215,16 @@ colorbar
 % xlim([0 500])
 ylim([0 600])
 set(gca,'Ydir','reverse')
-caxis([-100 0])
+caxis([0 100])
+
+hold on
+plot(r/1e3, d0,'LineWidth',2)
+plot(r(1)/1e3, zs, 'kx','LineWidth',2,'MarkerSize',10)
+hold off
+
+xlabel('Range (km)')
+ylabel('Depth (m)')
+title(['TL (dB), ',num2str(f0),' Hz, ',num2str(zs),' m Source'])
 
 
 %% Plot TL Contours
