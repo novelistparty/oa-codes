@@ -110,7 +110,6 @@ axis tight
 psi = ones(length(z), length(r));
 
 %  % Greene's Source - eq. (6.102)
-% psi = zeros(length(z), length(r));
 % psi(:,1) = sqrt(k0) * (1.4467 - 0.4201 .* k0^2 .* (z - zs).^2)...
 %         .* exp(-((k0^2 * (z - zs).^2) / 3.0512));
 
@@ -123,9 +122,9 @@ psi = ones(length(z), length(r));
 tht1 = pi/4;
 tht2 = pi/6;
 psi(:,1) = sqrt(k0) * tan(tht1) * exp(-0.5*k0^2*(Z(:,1) - zs).^2*tan(tht1)^2) ...
-    .* exp(1i * k0 * (Z(:,1) - zs) * sin(tht2)) ...
-    - sqrt(k0) * tan(tht1) * exp(-0.5*k0^2*(Z(:,1) + zs).^2*tan(tht1)^2) ...
-    .* exp(1i*k0*(Z(:,1) - 220)*sin(tht2));
+    .* exp(1i * k0 * (Z(:,1) - zs) * sin(tht2));% ...
+%     - sqrt(k0) * tan(tht1) * exp(-0.5*k0^2*(Z(:,1) - 220).^2*tan(tht1)^2) ...
+%     .* exp(1i*k0*(Z(:,1) - 220)*sin(-tht2));
 
 % % Line Source apprx. with depth dep. of mode 3
 % ind = find(z>100);
@@ -185,13 +184,14 @@ end
 
 % Convert density-reduced pressure to pressure 
 psi = dr_psi .* sqrt(rho);
-% psi = dr_psi;
+
 % Remove absorption layer for plotting
 ind = find(z>H, 1);
 psi = psi(1:ind, :);
 R = R(1:ind, :);
 Z = Z(1:ind, :);
 
+TL = -20 * log10( abs(psi) ./ sqrt(R.^2 + Z.^2) );
 % %% Save Data to txt Files for Plotting in PyLab
 % psiSave = -20 * log10( abs(psi) ./ sqrt(R));
 % 
@@ -205,13 +205,11 @@ Z = Z(1:ind, :);
 
 
 %% Plot TL
-figure; imagesc(r/1e3, z, -20 * log10( abs(psi) ./ sqrt(R) ))
+figure; imagesc(r/1e3, z, TL)
 shading interp
 grid off
 colorbar
-% axis equal
-% axis tight
-% xlim([0 500])
+
 ylim([0 600])
 set(gca,'Ydir','reverse')
 caxis([30 100])
@@ -228,16 +226,16 @@ title(['TL (dB), ',num2str(f0),' Hz, ',num2str(zs),' m Source'])
 
 
 %% Plot TL Contours
- v = [18 22 26 30 34 38 42 46];
-figure; 
-contourf(R/1e3, Z, -20 * log10( abs(psi) ./ sqrt(R) ),v,'CDataMapping','direct')
-colorbar
-% axis equal
-% axis tight
-% xlim([0 500])
- ylim([0 600])
-colormap('spring')
-set(gca,'Ydir','reverse')
+%  v = [18 22 26 30 34 38 42 46];
+% figure; 
+% contourf(R/1e3, Z, TL,v,'CDataMapping','direct')
+% colorbar
+% % axis equal
+% % axis tight
+% % xlim([0 500])
+%  ylim([0 600])
+% colormap('spring')
+% set(gca,'Ydir','reverse')
 
 %%
 toc
