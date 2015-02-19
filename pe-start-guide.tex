@@ -1,0 +1,241 @@
+% vim:tw=80 sw=2 ft=tex
+%         File: pe-start-guide.tex
+% Date Created: 2014 Aug 28
+%  Last Change: 2014 Aug 28
+%     Compiler: pdflatex --shell-escape
+%       Author: john
+\documentclass[12pt]{article}
+\usepackage{amsmath}
+\usepackage{graphicx} % for figures
+\usepackage{caption}
+\usepackage{subcaption} % for mutli-image figures
+\usepackage{float} % make figures show up properly
+
+\setlength{\parskip}{1.2ex} % Space between paragraphs
+\setlength{\parindent}{0em} % no paragraph indentation
+\usepackage[text={6.5in,9in},centering]{geometry} % decrease margins
+
+\usepackage{minted}
+
+
+% define the title
+\author{John Boyle}
+\title{Parabolic Equation Implementation Quick-Start Guide}
+\begin{document}
+\maketitle
+\tableofcontents
+
+\section{Introduction}
+  This guide will explain the "Recipe for a Simple PE Code" found in
+  Chapter 6, Appendix 1 of Computational Ocean Acoustics (COA), 1st
+  edition. The PE implementation described here is a variable density
+  model, computed with the split-step Fourier method. This guide is
+  intended to augment the material in the "Recipe" by bringing together
+  the many equations and explanations scattered throughout chapter 6.
+
+\section{PE Code Development}
+The recipe is presented below and is followed by a description of
+the equations used in each step. Where multiple options were
+available, the choice of formulation is explained.
+
+The basic "recipe" that will be followed is:
+\flushleft
+\begin{enumerate}
+\item Select Spatial Grid Size.
+\item Create Computational Domain.
+\item Add Environment Parameters.
+\item Calculate Squared Index of Refraction.
+\item Define Starting Field.
+\item Choose Marching FFT Algorithm.
+\item Choose Numerical Fourier Transform.
+\end{enumerate}
+
+\subsection{Select Spatial Grid Size}
+For an analytical source function such as the standard Gaussian (Eq.
+6.100), an upper bound on the grid size in \textit{z} is 
+\begin{equation*}
+\Delta z \leq \frac{\lambda}{4}.
+\end{equation*}
+
+Grid size in range is given by $ \Delta r = (2 - 5)\Delta z$ for shallow water and 
+$ \Delta r = (20 - 50)\Delta z$ for deep water.
+
+\subsection{Create Computational Domain}
+The computational domain is created to include the physical domain and
+an additional absorption layer to simulate a half-space below the bottom
+layer.  It is recommended in COA that the absorption layer thickness (in
+depth) be equal to one third the thickness of the physical domain.  The
+treatment of absorption in the absorption layer will be explained in the
+section "Squared Index of Refraction." 
+
+\subsection{Add Environmental Parameters}
+The environmental parameters density, absorption, and sound speed may be
+mapped onto matrices of the size of the computational domain.  For
+example, the sound speed of a computational ocean of depth D/2 above a
+ocean bottom of D/2 could be modeled by creating a matrix of depth D
+where the upper half contains the sound speed of water and the lower the
+sound speed of rock or sediment.  In a computing environment optimized
+for element-wise operations, such as MATLAB, it may be best to create
+entire matrices for sound speed, density and absorption.  In other
+computer environments and languages, this may be best accomplished
+through functions describing the boundaries between features.  In either
+case, the results will be directly applied to the calculation of the
+squared index of refraction.  For example, sound speed may be described
+as follows:
+
+\begin{minted}[mathescape,
+               numbersep=5pt,
+               gobble=2,
+               frame=lines,
+               framesep=2mm]{matlab}
+  zbot = 500;        % ocean depth
+  zmax = 1000;       % max depth of physical domain
+  zabs = zmax * 4/3; % absorption layer thickness
+
+  % range and depth vectors
+  r = 0 : dr : rmax;
+  z = 0 : dz : (zmax + zabs);
+
+  % find indices of zbot and zmax
+  zbot_ind = find(z >= zbot, 1);
+  zmax_ind = find(z >= zmax, 1);
+
+  % create sound speed environment matrix
+  C = ones(length(r),length(z));
+  C(:, 1:zbot_ind) = c_water;
+  C(:, zbot_ind+1:zmax_ind) = c_sediment;
+  C(:, zmax_ind+1:end) = c_absorption; % usually not a constant (see below)
+\end{minted}
+
+ 
+\subsection{Calculate Squared Index of Refraction}
+Density, absorption, and sound speed are included in the parabolic
+equation, through the squared index of refraction (Eq. 6.145): 
+\begin{equation}
+	\frac{\partial\psi}{\partial r} = \frac{ik_0}{2} 
+		\left( n^2 - 1 + \frac{1}{k_0^2} \frac{\partial^2}{\partial z^2} \right) \psi 
+		\label{standard PE}
+\end{equation}
+
+Following section 6.5.4 of COA, density variations may be included in
+the PE solution by solving the PE for density reduced pressure, 
+$\widetilde{\psi} = \psi / \sqrt{\rho}.$ 
+This is included in the code through the starting field, 
+\[\widetilde{\psi}(0,z) = \psi(0,z) / \sqrt{\rho(0,z)}.\]
+Pressure, $\psi(r,z)$, is retrieved from the final numerical field
+solution by multiplying by $\sqrt{\rho(r,z)}$.
+
+Density variations are included in the squared index of refraction by
+\begin{equation}
+	\widetilde{n^2} = n^2 + \frac{1}{2k_0^2}
+		\left[
+			\frac{1}{\rho(r,z)}\frac{\partial^2 \rho(r,z)}{\partial z^2} - 
+			\frac{3}{2\rho(r,z)^2} \left(\frac{\partial\rho(r,z)}{\partial z} \right)^2
+		\right]. \label{6.152}
+\end{equation}
+
+To avoid infinite derivatives at a density boundary, the function 
+\begin{equation}
+	\rho(z) = \frac{1}{2}(\rho_1 + \rho_2) + \frac{1}{2}(\rho_2 - \rho_1) 
+				\tanh \left(\frac{z - D_0}{L} \right) \label{6.153}
+\end{equation}
+smooths a boundary between layers of densities $\rho_1$ and $\rho_2$.
+The parameter $L$ is chosen with $k_0L = 2$ so that the smoothed
+boundary will be an accurate approximation of the real boundary. This
+expression may also be used to find an analytic expression for the
+derivatives in Eq. 6.151.
+
+In the expression for squared index of refraction (Eq. 6.151), $n^2$
+on the right-hand-side is given by 
+\begin{equation}
+	n^2 \simeq \left(\frac{c_0}{c}\right)^2 
+			\left[ 1 + i\frac{\alpha^{(\lambda)}}{27.29} \right],
+\end{equation}
+where $c$ and $\alpha^{(\lambda)}$, sound speed and absorption in
+dB/$\lambda$, are both functions of r and z.
+
+In the absorption layer, squared index of refraction is given by 
+\begin{equation}
+	n^2 = \left(\frac{c_0}{c_b}\right)^2 + i\alpha \exp \left[ - \left(\frac{z-z_\text{max}}{D}\right)^2 \right].
+\end{equation}
+where D is the width of the layer and $\alpha$ is generally 0.01. This
+gives an exponentially increasing absorption near the computational
+boundary and ensures no sound will leave.
+
+\subsection{Define Starting Field}
+Choose a source function from Section 6.4.2. 
+
+\subsection{Choose Marching FFT Algorithm}
+By introducing the operators
+\begin{equation}
+A = \frac{ik_0}{2}[n^2(r,z) - 1]; \qquad 
+B = \frac{i}{2k_0} \frac{\partial^2}{\partial z^2},
+\end{equation} 
+the PE \eqref{standard PE} may be written as a first-order differential equation
+\begin{equation}
+{\partial \psi}{\partial r} = (A + B)\psi = U(r,z)\psi.
+\end{equation}
+The solution,
+\begin{eqnarray}
+\psi(r,z) & = & e^{\int_{r_0}^{r_0 + \Delta r} U(r,z)dr} \psi(r_0,z) \nonumber \\
+& = & \simeq e^{\widetilde{U}\Delta r} \psi(r_0,z)  
+\end{eqnarray}
+may be approximated with several different splittings of the exponential
+operator $e^{\widetilde{U}\Delta r}. $
+
+The split-step marching solution recommended in the PE recipe in COA is
+derived from the exponential operator splitting
+	\begin{equation}
+		e^{(A + B)\Delta r} \simeq e^{A\Delta r} e^{B\Delta r}.
+	\end{equation}
+Its error is of order $(\Delta r)^2$.  A different solution,
+uses the splitting 
+	\begin{equation}
+		e^{(A + B)\Delta r} \simeq e^{\frac{A}{2} \Delta r} e^{B \Delta r} e^{\frac{A}{2} \Delta r},
+	\end{equation}
+whose error is of order $(\Delta r)^3$.  It is given by
+	\begin{equation}
+		\psi(r,z) = e^{\frac{ik_0}{4}[n^2(r_0,z)-1]\Delta r} \mathcal{F}^{-1} 
+			\Big\{
+				e^{-\frac{i \Delta r}{2k_0}k_z^2} \mathcal{F} 
+				\Big\{
+					e^{\frac{ik_0}{4}[n^2(r_0,z)-1]\Delta r} \psi(r_0,z)
+				\Big\}
+			\Big\} \label{spltstpmarch}
+	\end{equation}
+	
+This formulation is based on the form of the PE called the Tappert
+equation.  
+
+\subsection{Choose Numerical Fourier Transform}
+The derivation of the PE \eqref{standard PE} assumes $\psi(r,0) = 0$. This boundary
+condition may be enforced through the use of the discrete Fast Sine Transform (FST) 
+in \eqref{spltstpmarch}. The FST assumes its input is a zero-point odd function, 
+therefore, $\psi(r,0) = 0$.  Complex values are easily handled by taking advantage 
+of the linearity of Fourier Transforms,  
+	\begin{equation}
+		\mathcal{F}\big\{x(t) + iy(t)\big\} = \mathcal{F}\big\{x(t)\big\} + 
+				i\mathcal{F}\big\{y(t)\big\}.
+	\end{equation}
+
+\section{Lloyd Mirror Reference Solution}
+A good analytical reference solution is the Lloyd-mirror interference
+pattern, where a point source is placed at a depth $z_s$, and an image
+source at $-z_s$ is used to enforce the boundary condition of $p(r,0) =
+0$.  The equations are
+	\begin{equation}
+		p(r,z) = \frac{e^{ikR_1}}{R_1} - \frac{e^{ikR_2}}{R_2}
+	\end{equation}
+where
+	\begin{equation}
+		R_1 = \sqrt{r^2 + (z - z_s)^2}, \qquad R_2 = \sqrt{r^2 + (z + z_s)^2}
+	\end{equation}
+The physical environment is a simulated fluid half-space with sound
+speed $c = 1500 m/s$.
+
+\section{Conclusion}
+  This document has provided a detailed explanation of the PE "Recipe"
+  found in COA. Good luck. Please email me if you have questions about
+  how to code any of these expressions in MATLAB.
+
+\end{document}
