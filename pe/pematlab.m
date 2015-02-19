@@ -33,8 +33,8 @@ tic
     rmax = 15000;
     
 % Grid Size (6.216) and (6.219)
-    dz = lambda0 / 5;
-    dr = 2 * dz;
+    dz = lambda0 / 12;
+    dr = dz;
     
 %% Density reduced Squared index of refraction. Eq. (6.152).
 r = 0.01: dr : rmax;
@@ -109,30 +109,28 @@ axis tight
 %% Starting fields - psi(r,z)
 psi = ones(length(z), length(r));
 
- % Greene's Source - eq. (6.102)
-psi = zeros(length(z), length(r));
-psi(:,1) = sqrt(k0) * (1.4467 - 0.4201 .* k0^2 .* (z - zs).^2)...
-        .* exp(-((k0^2 * (z - zs).^2) / 3.0512));
+%  % Greene's Source - eq. (6.102)
+% psi(:,1) = sqrt(k0) * (1.4467 - 0.4201 .* k0^2 .* (z - zs).^2)...
+%         .* exp(-((k0^2 * (z - zs).^2) / 3.0512));
 
 % Standard Gaussian Source
 % psi(:,1) = sqrt(k0) * exp(-0.5 * k0^2 * (Z(:,1) - zs).^2) ... 
 %             - sqrt(k0) * exp(-0.5 * k0^2 * (Z(:,1) + zs).^2);
 % psi(:,1) = sqrt(k0) * exp(-0.5 * k0^2 * (Z(:,1) - zs).^2) ;
 
-% % Generalized Gaussian Source
-% tht1 = pi/3;
-% tht2 = 0;
-% psi = zeros(length(z), length(r));
-% psi(:,1) = sqrt(k0) * tan(tht1) * exp(-0.5*k0^2*(Z(:,1) - zs).^2*tan(tht1)^2) ...
-%     .* exp(1i * k0 * (Z(:,1) - zs) * sin(tht2)) ...
-%     - sqrt(k0) * tan(tht1) * exp(-0.5*k0^2*(Z(:,1) + zs).^2*tan(tht1)^2) ...
-%     .* exp(1i*k0*(Z(:,1)+zs)*sin(tht2));
+% Generalized Gaussian Source
+tht1 = pi/4;
+tht2 = pi/6;
+psi(:,1) = sqrt(k0) * tan(tht1) * exp(-0.5*k0^2*(Z(:,1) - zs).^2*tan(tht1)^2) ...
+    .* exp(1i * k0 * (Z(:,1) - zs) * sin(tht2));% ...
+%     - sqrt(k0) * tan(tht1) * exp(-0.5*k0^2*(Z(:,1) - 220).^2*tan(tht1)^2) ...
+%     .* exp(1i*k0*(Z(:,1) - 220)*sin(-tht2));
 
-% %  Line Source apprx. with depth dep. of mode 3
-% % ind = find(z>100);
-% % psi(:,1) = sin(3* pi/100 * z);
-% % psi(:,1) = abs(psi(:,1)) + 1i * sign(psi(:,1));
-% % psi(ind:end,1) = 0;
+% % Line Source apprx. with depth dep. of mode 3
+% ind = find(z>100);
+% psi(:,1) = sin(3* pi/100 * z);
+% psi(:,1) = abs(psi(:,1)) + 1i * sign(psi(:,1));
+% psi(ind:end,1) = 0;
 
 % % Line Source apprx. with depth dep. of mode 2
 % H0 = 410;
@@ -159,8 +157,8 @@ dr_psi(1,:) = 0;
 % First apply eq. (6.129)
 % N = 2^nextpow2(length(z));
 N = length(z);
-dkz = 1 / (dz * N);
-kz = 0 : dkz : 1 / dz - dkz;
+kzmax = 2*pi/dz;
+kz = linspace(0,kzmax,N);
 kz = kz.';
 
 step = 0 * dr_psi(:,1);    
@@ -181,18 +179,19 @@ for jj = 1 : (length(r) - 1)
     
     dr_psi(:,jj+1) =  exp(0.5 * 1i * k0 .* (dr_nsqr(:,jj) - 1) * dr) .* (stepr + 1i * stepi);
 
-    nR - jj
+    disp(nR - jj)
 end
 
 % Convert density-reduced pressure to pressure 
 psi = dr_psi .* sqrt(rho);
-% psi = dr_psi;
+
 % Remove absorption layer for plotting
 ind = find(z>H, 1);
 psi = psi(1:ind, :);
 R = R(1:ind, :);
 Z = Z(1:ind, :);
 
+TL = -20 * log10( abs(psi) ./ sqrt(R.^2 + Z.^2) );
 % %% Save Data to txt Files for Plotting in PyLab
 % psiSave = -20 * log10( abs(psi) ./ sqrt(R));
 % 
@@ -206,16 +205,15 @@ Z = Z(1:ind, :);
 
 
 %% Plot TL
-figure; pcolor(R/1e3, Z, -10 * log10( abs(psi) ./ sqrt(R) ))
+figure; imagesc(r/1e3, z, TL)
 shading interp
 grid off
 colorbar
-% axis equal
-% axis tight
-% xlim([0 500])
+
 ylim([0 600])
 set(gca,'Ydir','reverse')
-caxis([0 100])
+caxis([30 100])
+colormap(flip(jet))
 
 hold on
 plot(r/1e3, d0,'LineWidth',2)
@@ -228,16 +226,16 @@ title(['TL (dB), ',num2str(f0),' Hz, ',num2str(zs),' m Source'])
 
 
 %% Plot TL Contours
- v = [18 22 26 30 34 38 42 46];
-figure; 
-contourf(R/1e3, Z, -10 * log10( abs(psi) ./ sqrt(R) ),v,'CDataMapping','direct')
-colorbar
-% axis equal
-% axis tight
-% xlim([0 500])
- ylim([0 600])
-colormap('spring')
-set(gca,'Ydir','reverse')
+%  v = [18 22 26 30 34 38 42 46];
+% figure; 
+% contourf(R/1e3, Z, TL,v,'CDataMapping','direct')
+% colorbar
+% % axis equal
+% % axis tight
+% % xlim([0 500])
+%  ylim([0 600])
+% colormap('spring')
+% set(gca,'Ydir','reverse')
 
 %%
 toc

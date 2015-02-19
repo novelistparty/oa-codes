@@ -15,7 +15,7 @@ tic
 
 % Source parameters
     zs = 75;
-    f0 = 150; 
+    f0 = 100; 
     k0 = 2 * pi * f0 / c1;
     k2 = 2 * pi * f0 / c2;
     lambda0 = c1 / f0; 
@@ -27,8 +27,8 @@ tic
     rmax = 500;
     
 % Grid Size (6.216) and (6.219)
-    dz = lambda0 / 4;
-    dr = 2*dz;
+    dz = lambda0 / 6;
+    dr = dz;
     
 %% Density reduced Squared index of refraction. Eq. (6.152).
 
@@ -70,17 +70,17 @@ psi = ones(length(z), length(r));
 % psi(:,1) = sqrt(k0) * (1.4467 - 0.4201 .* k0^2 .* (Z(:,1) - zs).^2)...
 %         .* exp(-((k0^2 * (Z(:,1) - zs).^2) / 3.0512));
 
-% % Standard Gaussian Source
-% psi(:,1) = sqrt(k0) * exp(-0.5 * k0^2 * (Z(:,1) - zs).^2) ... 
-%             - sqrt(k0) * exp(-0.5 * k0^2 * (Z(:,1) + zs).^2);
+% Standard Gaussian Source
+psi(:,1) = sqrt(k0) * exp(-0.5 * k0^2 * (Z(:,1) - zs).^2) ... 
+            - sqrt(k0) * exp(-0.5 * k0^2 * (Z(:,1) + zs).^2);
 % psi(:,1) = sqrt(k0) * exp(-k0^2 / 2 * (z - zs).^2) ;
 
-% Generalized Gaussian Source
-tht1 = pi/4;
-tht2 = pi/3;
-psi = zeros(length(z), length(r));
-psi(:,1) = sqrt(k0) * tan(tht1) * exp(-k0^2/2*(z - zs).^2*tan(tht1)^2) ...
-    .* exp(1i * k0 * (z - zs) * sin(tht2));
+% % Generalized Gaussian Source
+% tht1 = pi/4;
+% tht2 = pi/3;
+% psi = zeros(length(z), length(r));
+% psi(:,1) = sqrt(k0) * tan(tht1) * exp(-k0^2/2*(z - zs).^2*tan(tht1)^2) ...
+%     .* exp(1i * k0 * (z - zs) * sin(tht2));
     
 %% Plot source initial field
 figure
@@ -94,8 +94,8 @@ legend('\psi', 'rho')
 % First apply eq. (6.129)
 % N = 2^nextpow2(8 *(zmax/lambda0));
 N = length(z);
-dkz = 1 / (dz * N);
-kz = 0 : dkz : 1 / dz - dkz;
+kzmax = 2*pi/dz;
+kz = linspace(0,kzmax,N);
 kz = kz.';
 
 step = 0 * psi(:,1);    
@@ -117,7 +117,7 @@ for jj = 1 : nR
 
     disp(num2str(nR - jj))
 end
-
+TL = -20 * log10( abs(psi) ./ sqrt(R.^2 + Z.^2));
 
 %% Save Data to txt Files for Plotting in PyLab
 % psiSave = -20 * log10( abs(psi) ./ sqrt(R));
@@ -129,14 +129,15 @@ end
 
 %% Plot TL
 figure; 
-pcolor(R*1e-3, Z, -10 * log10( abs(psi) ./ sqrt(R)))
+imagesc(r*1e-3, z, TL)
 shading interp
 grid off
 colorbar
 axis tight
 ylim([0 H])
 set(gca,'Ydir','reverse')
-% caxis([90 15])
+caxis([15 90])
+colormap(flip(jet))
 
 xlabel('Range (km)')
 ylabel('Depth (m)')
@@ -144,7 +145,7 @@ title(['TL (dB), ',num2str(f0),' Hz, ',num2str(zs),' m Source'])
 
 %% Plot TL Contours
 v = [25, 31, 37, 43, 49, 55];
-figure; contourf(R, Z, -10 *log10( abs(psi) ./ sqrt(R) ), v)
+figure; contourf(R, Z, TL, v)
 colorbar
 xlim([0 500])
 ylim([0 500])
